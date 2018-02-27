@@ -88,10 +88,10 @@ nil     {adjust(); return NIL;}
 "|"     {adjust(); return OR;}
 ":="    {adjust(); return ASSIGN;}
 
-[a-zA-Z][_0-9a-zA-Z]*   {adjust(); return ID;}
+[a-zA-Z][_0-9a-zA-Z]*   {adjust(); yylval.sval=yytext; return ID;}
 
 
-"-"?[1-9][0-9]*     {adjust(); yylval.ival=atoi(yytext); return INT;}
+(0|("-"?[1-9][0-9]*))     {adjust(); yylval.ival=atoi(yytext); return INT;}
 
 "/*"    {adjust(); BEGIN(COMMENT);}
 <COMMENT>{
@@ -141,8 +141,8 @@ nil     {adjust(); return NIL;}
     [^\"\\\n]+  {adjust(); append(yytext);}
 }
 
-" "     {adjust(); continue;}
-\n      {adjust(); EM_newline(); continue;}
+[ \t]     {adjust(); continue;}
+(\n|\r\n)      {adjust(); EM_newline(); continue;}
 
 .       {adjust(); EM_error(EM_tokPos,"illegal token");}
 %%
