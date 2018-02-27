@@ -4,7 +4,13 @@
 #include "tokens.h"
 #include "errormsg.h"
 
+#define BUFSIZE 1024
+
 int charPos=1;
+int commentDepth = 0;
+
+char strbuf[BUFSIZE];
+int strLength;
 
 int yywrap(void)
 {
@@ -12,15 +18,33 @@ int yywrap(void)
  return 1;
 }
 
-
 void adjust(void)
 {
  EM_tokPos=charPos;
  charPos+=yyleng;
 }
 
-%}
+void init(void){
+    *strbuf = '\0';
+    strLength = 0;
+}
 
+void append(char* str){
+    if (strLength + strlen(str) < BUFSIZE){
+        strcat(strbuf, str);
+        strLength += strlen(str);
+    }
+}
+
+char* fin(void){
+    char *s = checked_malloc(strlen(strbuf) + 1);
+    strcpy(s, strbuf);
+    return s;
+}
+
+
+%}
+%x COMMENT STR
 %%
 while   {adjust(); return WHILE;}
 for     {adjust(); return FOR;}
@@ -67,14 +91,58 @@ nil     {adjust(); return NIL;}
 [a-zA-Z][_0-9a-zA-Z]*   {adjust(); return ID;}
 
 
-"-"?[1-9][0-9]*	 {adjust(); yylval.ival=atoi(yytext); return INT;}
+"-"?[1-9][0-9]*     {adjust(); yylval.ival=atoi(yytext); return INT;}
 
+"/*"    {adjust(); BEGIN(COMMENT);}
+<COMMENT>{
+    "/*"    {adjust(); commentDepth++;}
+    [^\n]   {adjust();}
+    (\n|\r\n)   {adjust(); EM_newline();}
+    "*/"    {adjust(); if(--commentDepth == 0) BEGIN(INITIAL);}
+}
 
+\"      {adjust(); BEGIN(STR); init();}
+<STR>{
+    \" {
+        adjust();
+        yylval.sval = fin();
+        BEGIN(INITIAL);
+        return STRING;
+    }
+    \\n {
+        adjust();
+        append("\n");
+    }
+    \\t {
+        adjust();
+        append("\t");
+    }
+    \\\" {
+        adjust();
+        append(yytext);
+    }
+    \\\\ {
+        adjust();
+        append(yytext);
+    }
+    \\[0-9]{3} {
+        adjust();
+        append(yytext);
+    }
+    \\^[GHIJLM] {
+        adjust();
+        append(yytext);
+    }
+    \\[ \n\t\r\f]+\\ {
+        adjust();
+    }
+    \\(.|\n)    {adjust(); EM_error(EM_tokPos, "illegal token");}
+    \n          {adjust(); EM_error(EM_tokPos, "illegal token");}
+    [^\"\\\n]+  {adjust(); append(yytext);}
+}
 
+" "     {adjust(); continue;}
+\n      {adjust(); EM_newline(); continue;}
 
-" "	 {adjust(); continue;}
-\n	 {adjust(); EM_newline(); continue;}
-
-.	 {adjust(); EM_error(EM_tokPos,"illegal token");}
-
-
+.       {adjust(); EM_error(EM_tokPos,"illegal token");}
+%%
